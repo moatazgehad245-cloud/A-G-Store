@@ -77,13 +77,18 @@ function boot(){
  document.getElementById("searchInput").addEventListener("input",renderProducts);
  renderCategories();
  
- if(!window.firebase||!firebase.apps||!firebase.apps.length){
+ try {
+   auth = window.firebaseAuth || firebase.auth();
+   db = window.firebaseDb || firebase.firestore();
+   storage = window.firebaseStorage || firebase.storage();
+ } catch(e) {
+   console.error(e);
+ }
+
+ if(!auth || !db){
    document.getElementById("products").innerHTML='<div class="empty">تعذر تشغيل Firebase. تأكد من إعدادات firebase.js</div>';
    return;
  }
- auth=window.firebaseAuth||firebase.auth();
- db=window.firebaseDb||firebase.firestore();
- storage=window.firebaseStorage||firebase.storage();
 
  auth.onAuthStateChanged(async user=>{
    currentUser=user;
