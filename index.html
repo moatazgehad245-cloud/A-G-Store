@@ -55,7 +55,10 @@
 <hr style="border:0;border-top:1px solid var(--line);margin:20px 0"><h3 style="margin:0 0 10px">المنتجات الحالية</h3><div class="adminList" id="adminProducts"></div></div>
 <div class="adminPanel" style="margin-top:12px" id="settingsTab"><h3 style="margin:0 0 12px">بيانات التواصل</h3><div class="field"><label>رقم الهاتف للاتصال (مع كود الدولة)</label><input id="sPhone" placeholder="2010XXXXXXX"></div><div class="field"><label>رقم الواتساب (أرقام فقط مع كود الدولة)</label><input id="sWhatsapp" placeholder="2010XXXXXXXXX"></div><div class="field"><label>عنوان المتجر</label><input id="sAddress" placeholder="دكرنس، الدقهلية"></div><div class="field"><label>وصف قصير للمتجر</label><textarea id="sDescription" rows="2" maxlength="300"></textarea></div><div class="field"><label>رابط صفحة فيسبوك (اختياري)</label><input id="sFacebook" type="url" placeholder="https://facebook.com/..."></div><div class="field"><label>رابط إنستجرام (اختياري)</label><input id="sInstagram" type="url" placeholder="https://instagram.com/..."></div><button class="btn primary" onclick="saveSettings()">حفظ بيانات التواصل</button><div id="settingsStatus" class="status"></div></div>
 </div></div></div>
-<script src="config.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <script src="firebase.js"></script>
 <script>
 const ADMIN_UID = "XJXWl4p444edT5otsvIcd2F1Fi02";
@@ -69,16 +72,19 @@ const digits=s=>String(s||"").replace(/\D/g,"");
 function setStatus(id,msg,type=""){const e=document.getElementById(id);e.textContent=msg;e.className="status "+type}
 function isAdmin(){return !!currentUser && currentUser.uid===ADMIN_UID}
 function iconFor(c){return ({"هدايا":"🎁","إكسسوارات":"💎","برفانات":"🌸","ميك أب":"💄","ورد":"💐","طباعة وتخصيص":"☕","أخرى":"💗"})[c]||"🎀"}
-async function boot(){
+function boot(){
  document.getElementById("year").textContent=new Date().getFullYear();
  document.getElementById("searchInput").addEventListener("input",renderProducts);
  renderCategories();
  
- auth=window.firebaseAuth; db=window.firebaseDb; storage=window.firebaseStorage;
- if(!auth||!db){
+ if(!window.firebase||!firebase.apps||!firebase.apps.length){
    document.getElementById("products").innerHTML='<div class="empty">تعذر تشغيل Firebase. تأكد من إعدادات firebase.js</div>';
    return;
  }
+ auth=window.firebaseAuth||firebase.auth();
+ db=window.firebaseDb||firebase.firestore();
+ storage=window.firebaseStorage||firebase.storage();
+
  auth.onAuthStateChanged(async user=>{
    currentUser=user;
    if(user&&isAdmin()){
