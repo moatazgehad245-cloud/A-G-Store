@@ -1,8 +1,4 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-
+// إعدادات فايربيس للمتجر
 const firebaseConfig = {
   apiKey: "AIzaSyDqMUyzmjENFG9gtUYTQl74PVzJkErgcus",
   authDomain: "a-g-store-ec785.firebaseapp.com",
@@ -12,8 +8,12 @@ const firebaseConfig = {
   appId: "1:71612385194:web:a08128d55434d6ac1ccdd3"
 };
 
-const app = initializeApp(firebaseConfig);
+// تهيئـة التطبيق
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
-window.firebaseAuth = getAuth(app);
-window.firebaseDb = getFirestore(app);
-window.firebaseStorage = getStorage(app);
+// تعريف المتغيرات العامة لاستخدامها في المتجر ولوحة التحكم
+window.firebaseAuth = firebase.auth();
+window.firebaseDb = firebase.firestore();
+window.firebaseStorage = firebase.storage();
