@@ -55,10 +55,7 @@
 <hr style="border:0;border-top:1px solid var(--line);margin:20px 0"><h3 style="margin:0 0 10px">المنتجات الحالية</h3><div class="adminList" id="adminProducts"></div></div>
 <div class="adminPanel" style="margin-top:12px" id="settingsTab"><h3 style="margin:0 0 12px">بيانات التواصل</h3><div class="field"><label>رقم الهاتف للاتصال (مع كود الدولة)</label><input id="sPhone" placeholder="2010XXXXXXX"></div><div class="field"><label>رقم الواتساب (أرقام فقط مع كود الدولة)</label><input id="sWhatsapp" placeholder="2010XXXXXXXXX"></div><div class="field"><label>عنوان المتجر</label><input id="sAddress" placeholder="دكرنس، الدقهلية"></div><div class="field"><label>وصف قصير للمتجر</label><textarea id="sDescription" rows="2" maxlength="300"></textarea></div><div class="field"><label>رابط صفحة فيسبوك (اختياري)</label><input id="sFacebook" type="url" placeholder="https://facebook.com/..."></div><div class="field"><label>رابط إنستجرام (اختياري)</label><input id="sInstagram" type="url" placeholder="https://instagram.com/..."></div><button class="btn primary" onclick="saveSettings()">حفظ بيانات التواصل</button><div id="settingsStatus" class="status"></div></div>
 </div></div></div>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="config.js"></script>
 <script src="firebase.js"></script>
 <script>
 const ADMIN_UID = "XJXWl4p444edT5otsvIcd2F1Fi02";
@@ -70,36 +67,226 @@ const money=n=>new Intl.NumberFormat("ar-EG",{maximumFractionDigits:2}).format(N
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const digits=s=>String(s||"").replace(/\D/g,"");
 function setStatus(id,msg,type=""){const e=document.getElementById(id);e.textContent=msg;e.className="status "+type}
-function isAdmin(){return !!currentUser && currentUser.uid===ADMIN_UID && ADMIN_UID!=="PUT_YOUR_FIREBASE_AUTH_UID_HERE"}
+function isAdmin(){return !!currentUser && currentUser.uid===ADMIN_UID}
 function iconFor(c){return ({"هدايا":"🎁","إكسسوارات":"💎","برفانات":"🌸","ميك أب":"💄","ورد":"💐","طباعة وتخصيص":"☕","أخرى":"💗"})[c]||"🎀"}
-function boot(){document.getElementById("year").textContent=new Date().getFullYear();document.getElementById("searchInput").addEventListener("input",renderProducts);renderCategories();
- if(!window.firebase||!firebase.apps||!firebase.apps.length){document.getElementById("products").innerHTML='<div class="empty">تعذر تشغيل Firebase. تأكد من ملف firebase.js وإعداداته.</div>';return}
- auth=window.firebaseAuth||firebase.auth();db=window.firebaseDb||firebase.firestore();storage=window.firebaseStorage||firebase.storage();
- auth.onAuthStateChanged(async user=>{currentUser=user;if(user&&isAdmin()){document.getElementById("adminWelcome").textContent="مسجل الدخول: "+(user.email||"المسؤول");showDashboard();}else if(user){await auth.signOut();currentUser=null;setStatus("loginStatus","الحساب ده مش مصرح له بإدارة المتجر.","error")}});
+async function boot(){
+ document.getElementById("year").textContent=new Date().getFullYear();
+ document.getElementById("searchInput").addEventListener("input",renderProducts);
+ renderCategories();
+ 
+ auth=window.firebaseAuth; db=window.firebaseDb; storage=window.firebaseStorage;
+ if(!auth||!db){
+   document.getElementById("products").innerHTML='<div class="empty">تعذر تشغيل Firebase. تأكد من إعدادات firebase.js</div>';
+   return;
+ }
+ auth.onAuthStateChanged(async user=>{
+   currentUser=user;
+   if(user&&isAdmin()){
+     document.getElementById("adminWelcome").textContent="مسجل الدخول: "+(user.email||"المسؤول");
+     showDashboard();
+   }else if(user){
+     await auth.signOut();
+     currentUser=null;
+     setStatus("loginStatus","الحساب غير مصرح له بالإدارة.","error");
+   }
+ });
  loadStore();
+ document.getElementById("productForm").addEventListener("submit",saveProduct);
 }
-async function loadStore(){try{const snap=await db.collection("products").get();allProducts=snap.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.active!==false);const ss=await db.collection("store_settings").doc("main").get();if(ss.exists)settings={...settings,...ss.data()};updateContactUI();renderCategories();renderProducts()}catch(e){console.error(e);document.getElementById("products").innerHTML='<div class="empty">تعذر تحميل المنتجات. راجع إعدادات Firebase وقواعد Firestore.</div>';document.getElementById("countLabel").textContent="تعذر الاتصال"}}
-function renderCategories(){const el=document.getElementById("categories");el.innerHTML=categoriesList.map(c=>`<button class="cat ${activeCategory===c?"active":""}" onclick="selectCategory('${c.replace(/'/g,"\\'")}')">${esc(c)}</button>`).join("")}
+async function loadStore(){
+ try{
+   const snap=await db.collection("products").get();
+   allProducts=snap.docs.map(d=>({id:d.id,...d.data()})).filter(p=>p.active!==false);
+   const ss=await db.collection("store_settings").doc("main").get();
+   if(ss.exists) settings={...settings,...ss.data()};
+   updateContactUI();
+   renderCategories();
+   renderProducts();
+ }catch(e){
+   console.error(e);
+   document.getElementById("products").innerHTML='<div class="empty">تعذر تحميل المنتجات. تأكد من اتصال الإنترنت وقواعد الفايرستور.</div>';
+   document.getElementById("countLabel").textContent="تعذر الاتصال";
+ }
+}
+function renderCategories(){
+ const el=document.getElementById("categories");
+ el.innerHTML=categoriesList.map(c=>`<button class="cat ${activeCategory===c?"active":""}" onclick="selectCategory('${c}')">${esc(c)}</button>`).join("");
+}
 function selectCategory(c){activeCategory=c;renderCategories();renderProducts()}
-function renderProducts(){const q=(document.getElementById("searchInput")?.value||"").trim().toLowerCase();const list=allProducts.filter(p=>(activeCategory==="الكل"||p.category===activeCategory)&&(`${p.name||""} ${p.description||""} ${p.category||""}`).toLowerCase().includes(q));document.getElementById("countLabel").textContent=`${list.length} منتج`;const el=document.getElementById("products");if(!list.length){el.innerHTML='<div class="empty">مفيش منتجات ظاهرة دلوقتي 💗</div>';return}
-el.innerHTML=list.map(p=>`<article class="product"><div class="photo">${p.image_url?`<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy">`:`<div class="placeholder">${iconFor(p.category)}</div>`}${p.badge?`<span class="tag">${esc(p.badge)}</span>`:""}</div><div class="pbody"><h3>${esc(p.name||"منتج")}</h3><p>${esc(p.description||"تواصل معنا لمعرفة التفاصيل.")}</p><div class="priceRow"><div class="price">${money(p.price)}${p.old_price?` <span class="oldPrice">${money(p.old_price)}</span>`:""}</div></div><button class="orderBtn" onclick="orderProduct('${esc(p.id)}')">اطلب المنتج عبر واتساب 💬</button></div></article>`).join("")}
-function contactNow(){const n=digits(settings.whatsapp||settings.phone||DEFAULT_WHATSAPP);if(n)window.open("https://wa.me/"+n,"_blank","noopener");else alert("رقم التواصل لم يُضف بعد. سجّل دخول المسؤول وأضف الرقم من بيانات التواصل.")}
-function orderProduct(id){const p=allProducts.find(x=>String(x.id)===String(id));if(!p)return;const n=digits(settings.whatsapp||settings.phone||DEFAULT_WHATSAPP);if(!n){alert("رقم الواتساب لم يُضف بعد.");return}const msg=`أهلاً متجر A&G، أرغب في طلب المنتج: ${p.name} — السعر: ${money(p.price)}`;window.open("https://wa.me/"+n+"?text="+encodeURIComponent(msg),"_blank","noopener")}
-function updateContactUI(){document.getElementById("contactCaption").textContent=settings.description||"كلمنا وهنساعدك تختار الأنسب ليك.";document.getElementById("footerPhone").textContent=settings.phone?"للاتصال: "+settings.phone+(settings.address?" · "+settings.address:""):(settings.address||"");const n=digits(settings.whatsapp||settings.phone||DEFAULT_WHATSAPP);document.getElementById("waFloat").href=n?"https://wa.me/"+n:"#"}
+function renderProducts(){
+ const q=(document.getElementById("searchInput")?.value||"").trim().toLowerCase();
+ const list=allProducts.filter(p=>(activeCategory==="الكل"||p.category===activeCategory)&&(`${p.name||""} ${p.description||""} ${p.category||""}`).toLowerCase().includes(q));
+ document.getElementById("countLabel").textContent=`${list.length} منتج`;
+ const el=document.getElementById("products");
+ if(!list.length){el.innerHTML='<div class="empty">مفيش منتجات ظاهرة دلوقتي 💗</div>';return}
+ el.innerHTML=list.map(p=>`<article class="product"><div class="photo">${p.image_url?`<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy">`:`<div class="placeholder">${iconFor(p.category)}</div>`}${p.badge?`<span class="tag">${esc(p.badge)}</span>`:""}</div><div class="pbody"><h3>${esc(p.name||"منتج")}</h3><p>${esc(p.description||"تواصل معنا لمعرفة التفاصيل.")}</p><div class="priceRow"><div class="price">${money(p.price)}${p.old_price?` <span class="oldPrice">${money(p.old_price)}</span>`:""}</div></div><button class="orderBtn" onclick="orderProduct('${esc(p.id)}')">اطلب المنتج عبر واتساب 💬</button></div></article>`).join("");
+}
+function contactNow(){
+ const n=digits(settings.whatsapp||settings.phone||DEFAULT_WHATSAPP);
+ if(n) window.open("https://wa.me/"+n,"_blank","noopener");
+ else alert("رقم التواصل لم يُضف بعد.");
+}
+function orderProduct(id){
+ const p=allProducts.find(x=>String(x.id)===String(id));
+ if(!p)return;
+ const n=digits(settings.whatsapp||settings.phone||DEFAULT_WHATSAPP);
+ if(!n){alert("رقم الواتساب لم يُضف بعد.");return}
+ const msg=`أهلاً متجر A&G، أرغب في طلب المنتج: ${p.name} — السعر: ${money(p.price)}`;
+ window.open("https://wa.me/"+n+"?text="+encodeURIComponent(msg),"_blank","noopener");
+}
+function updateContactUI(){
+ document.getElementById("contactCaption").textContent=settings.description||"كلمنا وهنساعدك تختار الأنسب ليك.";
+ document.getElementById("footerPhone").textContent=settings.phone?"للاتصال: "+settings.phone+(settings.address?" · "+settings.address:""):(settings.address||"");
+ const n=digits(settings.whatsapp||settings.phone||DEFAULT_WHATSAPP);
+ document.getElementById("waFloat").href=n?"https://wa.me/"+n:"#";
+}
 function openAdmin(){document.getElementById("adminModal").classList.add("open");document.body.style.overflow="hidden";if(currentUser&&isAdmin())showDashboard()}
 function closeAdmin(){document.getElementById("adminModal").classList.remove("open");document.body.style.overflow=""}
 document.getElementById("adminModal").addEventListener("click",e=>{if(e.target.id==="adminModal")closeAdmin()});
-async function loginAdmin(){if(!auth){setStatus("loginStatus","Firebase لم يتم تهيئته بشكل صحيح.","error");return}const email=document.getElementById("adminEmail").value.trim(),password=document.getElementById("adminPassword").value;setStatus("loginStatus","جاري تسجيل الدخول...");try{await auth.signInWithEmailAndPassword(email,password);if(!currentUser||!isAdmin()){await auth.signOut();setStatus("loginStatus","الحساب غير معتمد كمسؤول. راجع ADMIN_UID داخل index.html.","error");return}showDashboard()}catch(e){setStatus("loginStatus","فشل تسجيل الدخول: "+e.message,"error")}}
-function showDashboard(){if(!isAdmin())return;document.getElementById("loginPane").classList.add("hidden");document.getElementById("dashboardPane").classList.remove("hidden");loadAdminProducts();loadSettingsForm()}
-async function logoutAdmin(){if(auth)await auth.signOut();currentUser=null;document.getElementById("dashboardPane").classList.add("hidden");document.getElementById("loginPane").classList.remove("hidden");setStatus("loginStatus","تم تسجيل الخروج.","ok")}
-async function loadAdminProducts(){if(!isAdmin())return;const el=document.getElementById("adminProducts");try{const snap=await db.collection("products").get();const data=snap.docs.map(d=>({id:d.id,...d.data()}));if(!data.length){el.innerHTML='<div class="notice">لسه مفيش منتجات. أضف أول منتج من النموذج بالأعلى.</div>';allProducts=[];renderProducts();return}el.innerHTML=data.map(p=>`<div class="adminItem">${p.image_url?`<img src="${esc(p.image_url)}" alt="">`:`<div class="featureIcon">${iconFor(p.category)}</div>`}<div class="info"><b>${esc(p.name||"منتج")} ${p.active===false?"(مخفي)":""}</b><small>${esc(p.category||"أخرى")} · ${money(p.price)}</small></div><button class="btn light" onclick="editProduct('${esc(p.id)}')">تعديل</button><button class="danger" onclick="deleteProduct('${esc(p.id)}')">حذف</button></div>`).join("");allProducts=data.filter(p=>p.active!==false);renderCategories();renderProducts()}catch(e){el.textContent="تعذر تحميل المنتجات: "+e.message}}
-async function saveProduct(e){e.preventDefault();if(!isAdmin()){setStatus("productStatus","سجّل دخول المسؤول أولًا.","error");return}const id=document.getElementById("productId").value;const payload={name:document.getElementById("pName").value.trim(),category:document.getElementById("pCategory").value,price:Number(document.getElementById("pPrice").value),old_price:document.getElementById("pOldPrice").value?Number(document.getElementById("pOldPrice").value):null,description:document.getElementById("pDescription").value.trim(),badge:document.getElementById("pBadge").value.trim(),active:document.getElementById("pActive").value==="true",updated_at:firebase.firestore.FieldValue.serverTimestamp()};const file=document.getElementById("pImage").files[0];try{if(file){if(file.size>5*1024*1024){setStatus("productStatus","حجم الصورة أكبر من 5 ميجابايت.","error");return}if(!file.type.startsWith("image/")){setStatus("productStatus","اختار ملف صورة صحيح.","error");return}setStatus("productStatus","جاري رفع الصورة...");const path="products/"+Date.now()+"_"+file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const ref=storage.ref(path);await ref.put(file);payload.image_path=path;payload.image_url=await ref.getDownloadURL()}else if(id){const old=allProducts.find(p=>String(p.id)===id);if(old?.image_url)payload.image_url=old.image_url;if(old?.image_path)payload.image_path=old.image_path}else{payload.image_url="";payload.image_path=""}
-setStatus("productStatus","جاري حفظ المنتج...");if(id){await db.collection("products").doc(id).set(payload,{merge:true})}else{payload.created_at=firebase.firestore.FieldValue.serverTimestamp();await db.collection("products").add(payload)}setStatus("productStatus","تم حفظ المنتج.","ok");resetProductForm();await loadAdminProducts()}catch(e){console.error(e);setStatus("productStatus","تعذر الحفظ: "+e.message,"error")}}
-function editProduct(id){db.collection("products").doc(id).get().then(s=>{if(!s.exists)return;const p=s.data();document.getElementById("productId").value=id;document.getElementById("pName").value=p.name||"";document.getElementById("pCategory").value=p.category||"أخرى";document.getElementById("pPrice").value=p.price??"";document.getElementById("pOldPrice").value=p.old_price??"";document.getElementById("pDescription").value=p.description||"";document.getElementById("pBadge").value=p.badge||"";document.getElementById("pActive").value=String(p.active!==false);document.getElementById("pImage").value="";document.getElementById("productForm").scrollIntoView({behavior:"smooth",block:"start"})}).catch(e=>setStatus("productStatus",e.message,"error"))}
-async function deleteProduct(id){if(!isAdmin()||!confirm("متأكد إنك تريد حذف المنتج نهائيًا؟"))return;try{const snap=await db.collection("products").doc(id).get();const p=snap.data();await db.collection("products").doc(id).delete();if(p?.image_path){try{await storage.ref(p.image_path).delete()}catch(e){console.warn("تعذر حذف الصورة:",e)}}await loadAdminProducts()}catch(e){alert("تعذر الحذف: "+e.message)}}
+async function loginAdmin(){
+ if(!auth){setStatus("loginStatus","Firebase غير مهيأ.","error");return}
+ const email=document.getElementById("adminEmail").value.trim(), password=document.getElementById("adminPassword").value;
+ setStatus("loginStatus","جاري تسجيل الدخول...");
+ try{
+   await auth.signInWithEmailAndPassword(email,password);
+   if(!currentUser||!isAdmin()){
+     await auth.signOut();
+     setStatus("loginStatus","الحساب غير معتمد كمسؤول.","error");
+     return;
+   }
+   showDashboard();
+ }catch(e){setStatus("loginStatus","فشل تسجيل الدخول: "+e.message,"error")}
+}
+function showDashboard(){
+ if(!isAdmin())return;
+ document.getElementById("loginPane").classList.add("hidden");
+ document.getElementById("dashboardPane").classList.remove("hidden");
+ loadAdminProducts();
+ loadSettingsForm();
+}
+async function logoutAdmin(){
+ if(auth) await auth.signOut();
+ currentUser=null;
+ document.getElementById("dashboardPane").classList.add("hidden");
+ document.getElementById("loginPane").classList.remove("hidden");
+ setStatus("loginStatus","تم تسجيل الخروج.","ok");
+}
+async function loadAdminProducts(){
+ if(!isAdmin())return;
+ const el=document.getElementById("adminProducts");
+ try{
+   const snap=await db.collection("products").get();
+   const data=snap.docs.map(d=>({id:d.id,...d.data()}));
+   if(!data.length){el.innerHTML='<div class="notice">لسه مفيش منتجات. أضف أول منتج من النموذج بالأعلى.</div>';allProducts=[];renderProducts();return}
+   el.innerHTML=data.map(p=>`<div class="adminItem">${p.image_url?`<img src="${esc(p.image_url)}" alt="">`:`<div class="featureIcon">${iconFor(p.category)}</div>`}<div class="info"><b>${esc(p.name||"منتج")} ${p.active===false?"(مخفي)":""}</b><small>${esc(p.category||"أخرى")} · ${money(p.price)}</small></div><button class="btn light" onclick="editProduct('${esc(p.id)}')">تعديل</button><button class="danger" onclick="deleteProduct('${esc(p.id)}')">حذف</button></div>`).join("");
+   allProducts=data.filter(p=>p.active!==false);
+   renderCategories();
+   renderProducts();
+ }catch(e){el.textContent="تعذر تحميل المنتجات: "+e.message}
+}
+async function saveProduct(e){
+ e.preventDefault();
+ if(!isAdmin()){setStatus("productStatus","سجّل دخول المسؤول أولًا.","error");return}
+ const id=document.getElementById("productId").value;
+ const payload={
+   name:document.getElementById("pName").value.trim(),
+   category:document.getElementById("pCategory").value,
+   price:Number(document.getElementById("pPrice").value),
+   old_price:document.getElementById("pOldPrice").value?Number(document.getElementById("pOldPrice").value):null,
+   description:document.getElementById("pDescription").value.trim(),
+   badge:document.getElementById("pBadge").value.trim(),
+   active:document.getElementById("pActive").value==="true",
+   updated_at:firebase.firestore.FieldValue.serverTimestamp()
+ };
+ const file=document.getElementById("pImage").files[0];
+ try{
+   if(file){
+     if(file.size>5*1024*1024){setStatus("productStatus","حجم الصورة أكبر من 5 ميجابايت.","error");return}
+     if(!file.type.startsWith("image/")){setStatus("productStatus","اختار ملف صورة صحيح.","error");return}
+     setStatus("productStatus","جاري رفع الصورة...");
+     const path="products/"+Date.now()+"_"+file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+     const ref=storage.ref(path);
+     await ref.put(file);
+     payload.image_path=path;
+     payload.image_url=await ref.getDownloadURL();
+   }else if(id){
+     const old=allProducts.find(p=>String(p.id)===id);
+     if(old?.image_url) payload.image_url=old.image_url;
+     if(old?.image_path) payload.image_path=old.image_path;
+   }else{
+     payload.image_url=""; payload.image_path="";
+   }
+   setStatus("productStatus","جاري حفظ المنتج...");
+   if(id){
+     await db.collection("products").doc(id).set(payload,{merge:true});
+   }else{
+     payload.created_at=firebase.firestore.FieldValue.serverTimestamp();
+     await db.collection("products").add(payload);
+   }
+   setStatus("productStatus","تم حفظ المنتج.","ok");
+   resetProductForm();
+   await loadAdminProducts();
+ }catch(e){console.error(e);setStatus("productStatus","تعذر الحفظ: "+e.message,"error")}
+}
+function editProduct(id){
+ db.collection("products").doc(id).get().then(s=>{
+   if(!s.exists)return;
+   const p=s.data();
+   document.getElementById("productId").value=id;
+   document.getElementById("pName").value=p.name||"";
+   document.getElementById("pCategory").value=p.category||"أخرى";
+   document.getElementById("pPrice").value=p.price??"";
+   document.getElementById("pOldPrice").value=p.old_price??"";
+   document.getElementById("pDescription").value=p.description||"";
+   document.getElementById("pBadge").value=p.badge||"";
+   document.getElementById("pActive").value=String(p.active!==false);
+   document.getElementById("pImage").value="";
+   document.getElementById("productForm").scrollIntoView({behavior:"smooth",block:"start"});
+ }).catch(e=>setStatus("productStatus",e.message,"error"));
+}
+async function deleteProduct(id){
+ if(!isAdmin()||!confirm("متأكد إنك تريد حذف المنتج نهائيًا؟"))return;
+ try{
+   const snap=await db.collection("products").doc(id).get();
+   const p=snap.data();
+   await db.collection("products").doc(id).delete();
+   if(p?.image_path){try{await storage.ref(p.image_path).delete()}catch(e){}}
+   await loadAdminProducts();
+ }catch(e){alert("تعذر الحذف: "+e.message)}
+}
 function resetProductForm(){document.getElementById("productForm").reset();document.getElementById("productId").value="";setStatus("productStatus","")}
-async function loadSettingsForm(){if(!isAdmin())return;try{const s=await db.collection("store_settings").doc("main").get();if(s.exists)settings={...settings,...s.data()};document.getElementById("sPhone").value=settings.phone||"";document.getElementById("sWhatsapp").value=settings.whatsapp||DEFAULT_WHATSAPP;document.getElementById("sAddress").value=settings.address||"";document.getElementById("sDescription").value=settings.description||"";document.getElementById("sFacebook").value=settings.facebook||"";document.getElementById("sInstagram").value=settings.instagram||""}catch(e){setStatus("settingsStatus","تعذر تحميل البيانات: "+e.message,"error")}}
-async function saveSettings(){if(!isAdmin()){setStatus("settingsStatus","سجّل دخول المسؤول أولًا.","error");return}const payload={phone:document.getElementById("sPhone").value.trim(),whatsapp:digits(document.getElementById("sWhatsapp").value),address:document.getElementById("sAddress").value.trim(),description:document.getElementById("sDescription").value.trim(),facebook:document.getElementById("sFacebook").value.trim(),instagram:document.getElementById("sInstagram").value.trim(),updated_at:firebase.firestore.FieldValue.serverTimestamp()};try{await db.collection("store_settings").doc("main").set(payload,{merge:true});settings={...settings,...payload};updateContactUI();setStatus("settingsStatus","تم حفظ بيانات التواصل.","ok")}catch(e){setStatus("settingsStatus","تعذر الحفظ: "+e.message,"error")}}
+async function loadSettingsForm(){
+ if(!isAdmin())return;
+ try{
+   const s=await db.collection("store_settings").doc("main").get();
+   if(s.exists) settings={...settings,...s.data()};
+   document.getElementById("sPhone").value=settings.phone||"";
+   document.getElementById("sWhatsapp").value=settings.whatsapp||DEFAULT_WHATSAPP;
+   document.getElementById("sAddress").value=settings.address||"";
+   document.getElementById("sDescription").value=settings.description||"";
+   document.getElementById("sFacebook").value=settings.facebook||"";
+   document.getElementById("sInstagram").value=settings.instagram||"";
+ }catch(e){setStatus("settingsStatus","تعذر تحميل البيانات: "+e.message,"error")}
+}
+async function saveSettings(){
+ if(!isAdmin()){setStatus("settingsStatus","سجّل دخول المسؤول أولًا.","error");return}
+ const payload={
+   phone:document.getElementById("sPhone").value.trim(),
+   whatsapp:digits(document.getElementById("sWhatsapp").value),
+   address:document.getElementById("sAddress").value.trim(),
+   description:document.getElementById("sDescription").value.trim(),
+   facebook:document.getElementById("sFacebook").value.trim(),
+   instagram:document.getElementById("sInstagram").value.trim(),
+   updated_at:firebase.firestore.FieldValue.serverTimestamp()
+ };
+ try{
+   await db.collection("store_settings").doc("main").set(payload,{merge:true});
+   settings={...settings,...payload};
+   updateContactUI();
+   setStatus("settingsStatus","تم حفظ بيانات التواصل.","ok");
+ }catch(e){setStatus("settingsStatus","تعذر الحفظ: "+e.message,"error")}
+}
 boot();
 </script>
-</body></html>
+</body>
+</html>
