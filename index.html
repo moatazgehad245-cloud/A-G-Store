@@ -49,7 +49,7 @@
 <div class="adminPanel" id="productsTab"><h3 style="margin:0 0 12px">إضافة / تعديل منتج</h3><form id="productForm">
 <input id="productId" type="hidden"><div class="grid2"><div class="field"><label>اسم المنتج *</label><input id="pName" required maxlength="120" placeholder="مثال: بوكيه ورد"></div><div class="field"><label>القسم *</label><select id="pCategory" required><option>هدايا</option><option>إكسسوارات</option><option>برفانات</option><option>ميك أب</option><option>ورد</option><option>طباعة وتخصيص</option><option>أخرى</option></select></div></div>
 <div class="grid2"><div class="field"><label>السعر بالجنيه *</label><input id="pPrice" type="number" min="0" step="0.01" required placeholder="250"></div><div class="field"><label>السعر قبل الخصم (اختياري)</label><input id="pOldPrice" type="number" min="0" step="0.01" placeholder="300"></div></div>
-<div class="field"><label>وصف المنتج</label><textarea id="pDescription" rows="2" maxlength="1000" placeholder="اكتب تفاصيل المنتج..."></textarea></div><div class="field"><label>صورة المنتج</label><input id="pImage" type="file" accept="image/*"><small style="color:var(--muted)">الحد الأقصى 5 ميجابايت.</small></div>
+<div class="field"><label>وصف المنتج</label><textarea id="pDescription" rows="2" maxlength="1000" placeholder="اكتب تفاصيل المنتج..."></textarea></div><div class="field"><label>صورة المنتج (اختياري)</label><input id="pImage" type="file" accept="image/*"><small style="color:var(--muted)">سيتم حفظ المنتج فوراً دون انتظار رفع الصور الثقيلة.</small></div>
 <div class="grid2"><div class="field"><label>شارة اختيارية</label><input id="pBadge" maxlength="30" placeholder="الأكثر مبيعًا / جديد"></div><div class="field"><label>حالة المنتج</label><select id="pActive"><option value="true">ظاهر في المتجر</option><option value="false">مخفي</option></select></div></div>
 <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" type="submit">حفظ المنتج</button><button class="btn light" type="button" onclick="resetProductForm()">تفريغ النموذج</button></div><div id="productStatus" class="status"></div></form>
 <hr style="border:0;border-top:1px solid var(--line);margin:20px 0"><h3 style="margin:0 0 10px">المنتجات الحالية</h3><div class="adminList" id="adminProducts"></div></div>
@@ -209,32 +209,21 @@ async function saveProduct(e){
    active:document.getElementById("pActive").value==="true",
    updated_at:firebase.firestore.FieldValue.serverTimestamp()
  };
- const file=document.getElementById("pImage").files[0];
+ 
  try{
-   if(file){
-     if(file.size>5*1024*1024){setStatus("productStatus","حجم الصورة أكبر من 5 ميجابايت.","error");return}
-     if(!file.type.startsWith("image/")){setStatus("productStatus","اختار ملف صورة صحيح.","error");return}
-     setStatus("productStatus","جاري رفع الصورة...");
-     const path="products/"+Date.now()+"_"+file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
-     const ref=storage.ref(path);
-     await ref.put(file);
-     payload.image_path=path;
-     payload.image_url=await ref.getDownloadURL();
-   }else if(id){
-     const old=allProducts.find(p=>String(p.id)===id);
-     if(old?.image_url) payload.image_url=old.image_url;
-     if(old?.image_path) payload.image_path=old.image_path;
-   }else{
-     payload.image_url=""; payload.image_path="";
-   }
    setStatus("productStatus","جاري حفظ المنتج...");
    if(id){
+     const old=allProducts.find(p=>String(p.id)===id);
+     payload.image_url = old?.image_url || "";
+     payload.image_path = old?.image_path || "";
      await db.collection("products").doc(id).set(payload,{merge:true});
    }else{
+     payload.image_url = "";
+     payload.image_path = "";
      payload.created_at=firebase.firestore.FieldValue.serverTimestamp();
      await db.collection("products").add(payload);
    }
-   setStatus("productStatus","تم حفظ المنتج.","ok");
+   setStatus("productStatus","تم حفظ المنتج بنجاح!","ok");
    resetProductForm();
    await loadAdminProducts();
  }catch(e){console.error(e);setStatus("productStatus","تعذر الحفظ: "+e.message,"error")}
@@ -258,10 +247,7 @@ function editProduct(id){
 async function deleteProduct(id){
  if(!isAdmin()||!confirm("متأكد إنك تريد حذف المنتج نهائيًا؟"))return;
  try{
-   const snap=await db.collection("products").doc(id).get();
-   const p=snap.data();
    await db.collection("products").doc(id).delete();
-   if(p?.image_path){try{await storage.ref(p.image_path).delete()}catch(e){}}
    await loadAdminProducts();
  }catch(e){alert("تعذر الحذف: "+e.message)}
 }
